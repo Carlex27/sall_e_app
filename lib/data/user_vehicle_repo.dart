@@ -7,6 +7,7 @@ class UserVehicleRepo {
   /// Devuelve el PRIMER vehículo del usuario (ownerUid == uid).
   Stream<DocumentSnapshot<Map<String, dynamic>>?> watchPrimaryVehicle() {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+    print('UID app => ${FirebaseAuth.instance.currentUser?.uid}');
     return _db
         .collection('vehicles')
         .where('ownerUid', isEqualTo: uid)
