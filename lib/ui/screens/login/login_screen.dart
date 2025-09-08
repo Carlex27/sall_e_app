@@ -32,17 +32,22 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!valid) return;
 
     setState(() => _isLoading = true);
-    // Aquí en el futuro conectarás Firebase Auth.
-    //await FirebaseAuth.instance.signInWithEmailAndPassword(
-    //  email: _emailCtrl.text.trim(),
-   //   password: _passCtrl.text,
-   // );
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.go('/app/dashboard');
-      // navega al dashboard
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text,
+      );
+      // no navegues manualmente: el redirect del router te manda a /app/dashboard
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Error de autenticación')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

@@ -1,159 +1,82 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import '../../../data/user_vehicle_repo.dart';
 
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Ficha del vehículo (EV)
-        _SectionCard(
-          title: 'Datos del vehículo',
-          children: const [
-            _KV('Modelo del vehículo', 'OS-CAR v1 (Eléctrico)'),
-            _KV('Número de serie / VIN', 'SLE-2025-001-ABC123'),
-            _KV('Año de fabricación', '2025'),
-          ],
-        ),
-        const SizedBox(height: 12),
+    final repo = UserVehicleRepo();
 
-        // Propietario / Compra
-        _SectionCard(
-          title: 'Propietario y compra',
-          children: const [
-            _KV('Nombre del comprador / usuario actual', 'Carlos Ocampo'),
-            _KV('Dirección / ciudad de compra', 'Acapulco, Gro.'),
-            _KV('Fecha de adquisición', '05 Ago 2025'),
-          ],
-        ),
-        const SizedBox(height: 12),
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>?>(
+      stream: repo.watchPrimaryVehicle(),
+      builder: (context, vehSnap) {
+        if (!vehSnap.hasData) return const Center(child: CircularProgressIndicator());
+        final veh = vehSnap.data;
+        if (veh == null || !veh.exists) {
+          return Center(child: Text('No encontré vehículo para ${FirebaseAuth.instance.currentUser?.email ?? ''}.'));
+        }
+        final v = veh.data()!;
+        final name = v['name'] as String? ?? 'Vehículo';
+        final vin = v['vin'] as String? ?? '—';
+        final year = (v['year'] as num?)?.toInt();
+        final deviceId = v['deviceId'] as String? ?? '—';
+        final cap = (v['capacity_kWh'] as num?)?.toDouble();
+        final eff = (v['km_per_kWh'] as num?)?.toDouble();
 
-        // Mantenimiento (último / próximo)
-        _SectionCard(
-          title: 'Mantenimiento',
-          children: const [
-            _KV('Último servicio realizado', '10 Ago 2025 – Taller SALL‑E\nDetalle: Revisión general, ajuste de frenos'),
-            _KV('Próximo servicio recomendado', '10 Nov 2025 (lo que ocurra primero)'),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Garantía
-        _SectionCard(
-          title: 'Garantía',
-          children: const [
-            _KV('Vigencia', 'xx meses '),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Facturación / Documentos
-        _SectionCard(
-          title: 'Facturación',
+        return ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.receipt_long),
-              title: const Text('Ver facturas'),
-              subtitle: const Text('Consulta o descarga tus documentos'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                // TODO: Navegar a detalle/listado de facturas o abrir PDF desde backend
-                // context.go('/app/facturas'); // si luego creas esa ruta
+            _Tile(title: 'Nombre', value: name, icon: Icons.directions_car),
+            _Tile(title: 'Año', value: year?.toString() ?? '—', icon: Icons.calendar_today),
+            _Tile(title: 'VIN / Placa', value: vin, icon: Icons.qr_code_2),
+            _Tile(title: 'Device ID', value: deviceId, icon: Icons.memory),
+            const SizedBox(height: 8),
+            _SectionHeader('Parámetros de autonomía'),
+            _Tile(title: 'Capacidad', value: cap != null ? '${cap.toStringAsFixed(1)} kWh' : '—', icon: Icons.battery_full),
+            _Tile(title: 'Eficiencia', value: eff != null ? '${eff.toStringAsFixed(1)} km/kWh' : '—', icon: Icons.route),
+            const SizedBox(height: 8),
+            _SectionHeader('Estado del dispositivo'),
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance.doc('devices/$deviceId').snapshots(),
+              builder: (_, devSnap) {
+                final last = devSnap.data?.data()?['lastSeenAt'] as Timestamp?;
+                final txt = last != null ? last.toDate().toLocal().toString() : 'Sin actividad reciente';
+                return _Tile(title: 'Última lectura', value: txt, icon: Icons.access_time);
               },
             ),
           ],
-        ),
-        const SizedBox(height: 24),
-
-        // Cerrar sesión (al final)
-        FilledButton.icon(
-          onPressed: () async {
-            await FirebaseAuth.instance.signOut();
-          },
-          icon: const Icon(Icons.logout),
-          label: const Text('Cerrar sesión'),
-        ),
-      ],
+        );
+      },
     );
   }
 }
 
-/// ------- Widgets de apoyo -------
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 4),
+    child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+  );
+}
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.children});
-
+class _Tile extends StatelessWidget {
+  const _Tile({required this.title, required this.value, this.icon});
   final String title;
-  final List<Widget> children;
+  final String value;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style:
-              Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            ..._withDividers(children),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _withDividers(List<Widget> items) {
-    if (items.isEmpty) return items;
-    final out = <Widget>[];
-    for (var i = 0; i < items.length; i++) {
-      out.add(items[i]);
-      if (i != items.length - 1) {
-        out.add(const Divider(height: 16));
-      }
-    }
-    return out;
-  }
-}
-
-class _KV extends StatelessWidget {
-  const _KV(this.k, this.v);
-
-  final String k;
-  final String v;
-
-  @override
-  Widget build(BuildContext context) {
-    final onVar = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 5,
-            child: Text(k,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600, color: onVar)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 7,
-            child: Text(v, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-        ],
+      child: ListTile(
+        leading: icon != null ? Icon(icon) : null,
+        title: Text(title),
+        subtitle: Text(value),
       ),
     );
   }
